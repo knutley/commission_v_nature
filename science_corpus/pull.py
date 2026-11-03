@@ -8,7 +8,10 @@ abstracts, and writes one row per paper to science_corpus.csv.
 
 Usage:
     pip install requests pandas
-    python build_science_corpus.py --mailto you@uni.ac.uk [--api-key KEY]
+    python build_science_corpus.py --mailto you@uni.ac.uk --api-key KEY
+
+A free OpenAlex API key is required (https://openalex.org/settings/api): the
+full pull is about 165 search requests, more than the no-key daily allowance.
 
 The query mirrors the one used to find the Nature Portfolio items. Nothing is
 dropped except duplicates; screening flags are added as columns so you decide.
@@ -105,19 +108,22 @@ def add_screening_flags(df):
     return df
 
 
-def fetch(mailto, api_key=None, per_page=200, pause=0.15):
+def fetch(mailto, api_key, per_page=100, pause=0.15):
     params = {"filter": FILTER, "select": SELECT, "per-page": per_page,
               "cursor": "*", "mailto": mailto}
-    if api_key:
-        params["api_key"] = api_key
     rows, total = [], None
     with requests.Session() as s:
+        s.headers["Authorization"] = f"Bearer {api_key}"
         while True:
-            for attempt in range(5):
+            for attempt in range(6):
                 r = s.get(BASE, params=params, timeout=60)
-                if r.status_code == 200:
-                    break
-                time.sleep(2 ** attempt)
+                if r.status_code in (429, 500, 502, 503):
+                    time.sleep(2 ** attempt)
+                    continue
+                break
+            if r.status_code in (401, 403):
+                raise SystemExit(f"\nOpenAlex refused the key ({r.status_code}): {r.text[:300]}\n"
+                                 "Check the key is copied correctly and activated (click the link in the email).")
             r.raise_for_status()
             data = r.json()
             total = total or data["meta"]["count"]
@@ -135,7 +141,8 @@ def fetch(mailto, api_key=None, per_page=200, pause=0.15):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mailto", required=True, help="your email, for OpenAlex's polite pool")
-    ap.add_argument("--api-key", help="OpenAlex API key, if you have one")
+    ap.add_argument("--api-key", required=True,
+                    help="free OpenAlex API key from https://openalex.org/settings/api")
     ap.add_argument("--out", default="science_corpus.csv")
     a = ap.parse_args()
 
