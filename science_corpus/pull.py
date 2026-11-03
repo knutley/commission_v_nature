@@ -3,18 +3,19 @@
 Build the science-side corpus for "Does science lead the Commission?"
 
 Pulls every OpenAlex article/review (1990-2025, with an abstract) whose title,
-abstract or keywords mention an EU term AND a climate-policy term, rebuilds the
-abstracts, and writes one row per paper to science_corpus.csv.
+abstract or keywords mention an EU term AND an environmental term, rebuilds the
+abstracts, and writes one row per paper to the output CSV.
 
 Usage:
     pip install requests pandas
-    python build_science_corpus.py --mailto you@uni.ac.uk --api-key KEY
+    python build_science_corpus.py --mailto you@uni.ac.uk --api-key KEY --out science_corpus_env.csv
 
-A free OpenAlex API key is required (https://openalex.org/settings/api): the
-full pull is about 165 search requests, more than the no-key daily allowance.
+A free OpenAlex API key is required (https://openalex.org/settings/api). The
+pull is about 640 search requests (~64k works), roughly $0.64 of the $1/day
+free allowance, so run it once per day at most.
 
-The query mirrors the one used to find the Nature Portfolio items. Nothing is
-dropped except duplicates; screening flags are added as columns so you decide.
+Nothing is dropped except duplicates (OpenAlex ID, then DOI); screening flags
+are added as columns so you decide.
 """
 import argparse
 import time
@@ -27,14 +28,17 @@ NATURE_PORTFOLIO = "P4310319908"
 
 EU_TERMS = ['"European Union"', '"EU"', '"European Commission"', '"EU ETS"',
             '"European Green Deal"', '"Fit for 55"', '"carbon border adjustment"', '"CBAM"']
-POLICY_TERMS = ['"climate policy"', '"climate policies"', '"climate target"', '"climate targets"',
-                '"climate neutrality"', '"emissions trading"', '"carbon price"', '"carbon pricing"',
-                '"carbon tax"', '"decarbonisation"', '"decarbonization"', '"net zero"',
-                '"emission reduction"', '"emissions reduction"', '"mitigation policy"',
-                '"climate law"', '"climate mitigation"', '"greenhouse gas emissions"',
-                '"carbon leakage"', '"renewable energy target"']
+# Broad environmental scope, mirroring the AdJUST Commission corpus (environmental
+# relevance broadly defined, then narrowed by the substantive keyword-density filter).
+# To mirror it exactly, swap in AdJUST's expert-curated keyword list here.
+ENV_TERMS = ['"environmental policy"', '"environmental policies"', '"environmental regulation"',
+             '"environmental protection"', '"climate change"', '"climate policy"', '"biodiversity"',
+             '"pollution"', '"sustainable development"', '"sustainability"', '"emissions"',
+             '"decarbonisation"', '"decarbonization"', '"renewable energy"', '"circular economy"',
+             '"ecosystem services"', '"nature conservation"', '"planetary boundaries"',
+             '"degrowth"', '"green growth"', '"just transition"']
 
-SEARCH = f"({' OR '.join(EU_TERMS)}) AND ({' OR '.join(POLICY_TERMS)})"
+SEARCH = f"({' OR '.join(EU_TERMS)}) AND ({' OR '.join(ENV_TERMS)})"
 FILTER = ",".join([
     f"title_abstract_keywords.search:{SEARCH}",
     "publication_year:1990-2025",
@@ -143,14 +147,21 @@ def main():
     ap.add_argument("--mailto", required=True, help="your email, for OpenAlex's polite pool")
     ap.add_argument("--api-key", required=True,
                     help="free OpenAlex API key from https://openalex.org/settings/api")
-    ap.add_argument("--out", default="science_corpus.csv")
+    ap.add_argument("--out", default="science_corpus_env.csv")
     a = ap.parse_args()
 
     df = pd.DataFrame(fetch(a.mailto, a.api_key))
+    n_raw = len(df)
     df = df.drop_duplicates("openalex_id")
-    # same paper indexed twice (preprint + journal version, etc.)
-    df["_t"] = df["title"].str.lower().str.replace(r"\W+", " ", regex=True).str.strip()
-    df = df.sort_values("cited_by", ascending=False).drop_duplicates(["_t", "year"]).drop(columns="_t")
+    # Same paper indexed twice: match on DOI only (title+year merged distinct
+    # papers with generic titles). Rows without a DOI are kept.
+    has_doi = df["doi"].notna()
+    df = pd.concat([df[has_doi].sort_values("cited_by", ascending=False).drop_duplicates("doi"),
+                    df[~has_doi]])
+    print(f"Retrieved {n_raw:,}; {len(df):,} after de-duplication")
+    # Possible remaining duplicates (same normalised title + year), flagged for review only
+    t = df["title"].str.lower().str.replace(r"\W+", " ", regex=True).str.strip()
+    df["flag_possible_duplicate"] = df.assign(_t=t).duplicated(["_t", "year"], keep=False)
     df = add_screening_flags(df).sort_values(["year", "openalex_id"])
     df.to_csv(a.out, index=False)
 
