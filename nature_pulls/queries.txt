@@ -3,7 +3,7 @@
 # RETRIEVAL. An article is retrieved if its metadata (title, abstract,
 # keywords) matches:   ([eu] AND [climate]) OR [standalone]
 # The query is deliberately neutral about linkages, so the corpus isn't
-# biased toward the themes you then go on to measure.
+# biased toward the themes I then go on to measure.
 #
 # TAGGING. [tag:NAME] sections are NOT used for retrieval. After download,
 # each article's title + abstract is scanned and the number of hits is stored
