@@ -1,0 +1,27 @@
+# Nature Portfolio journals to search, one per line.
+# Names are looked up in Springer Nature's nature.com title list (KBART) to
+# get their ISSNs. To skip the lookup, give ISSNs yourself: "Name | eISSN, pISSN"
+# Comment a line out with # to leave a journal out.
+
+# Core climate / energy / sustainability titles
+Nature
+Nature Climate Change
+Nature Energy
+Nature Sustainability
+Nature Communications
+Communications Earth & Environment
+Nature Reviews Earth & Environment
+npj Climate Action
+npj Climate and Atmospheric Science
+npj Urban Sustainability
+
+# Social science and adjacent policy fields
+Humanities and Social Sciences Communications
+Nature Human Behaviour
+Nature Food
+Nature Water
+Nature Cities
+Nature Ecology & Evolution
+
+# Very large and mostly natural-science; adds noise. Uncomment to include.
+# Scientific Reports
